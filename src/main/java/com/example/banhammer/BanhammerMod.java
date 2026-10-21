@@ -2,17 +2,13 @@ package com.example.banhammer;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Rarity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,24 +18,15 @@ public class BanhammerMod implements ModInitializer {
 
 	private static final String BAN_REASON = "Gebanned met de Banhammer";
 
-	public static final ResourceKey<Item> BANHAMMER_KEY =
-			ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath(MOD_ID, "banhammer"));
-
-	public static Item BANHAMMER;
-
 	@Override
 	public void onInitialize() {
-		BANHAMMER = Registry.register(
-				BuiltInRegistries.ITEM,
-				BANHAMMER_KEY,
-				new Item(new Item.Properties().setId(BANHAMMER_KEY).stacksTo(1).rarity(Rarity.EPIC))
-		);
-
+		// Server-only: er wordt niets geregistreerd. De hamer is een gewoon item
+		// (bijv. een mace) met custom_data {banhammer:1b}.
 		AttackEntityCallback.EVENT.register((player, level, hand, entity, hitResult) -> {
 			if (!(player instanceof ServerPlayer attacker)) {
 				return InteractionResult.PASS;
 			}
-			if (!attacker.getItemInHand(hand).is(BANHAMMER)) {
+			if (!isBanhammer(attacker.getItemInHand(hand))) {
 				return InteractionResult.PASS;
 			}
 			if (!(entity instanceof ServerPlayer target)) {
@@ -59,6 +46,11 @@ public class BanhammerMod implements ModInitializer {
 			return InteractionResult.SUCCESS;
 		});
 
-		LOGGER.info("Banhammer geladen!");
+		LOGGER.info("Banhammer (server-only) geladen!");
+	}
+
+	private static boolean isBanhammer(ItemStack stack) {
+		CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+		return data != null && data.copyTag().contains("banhammer");
 	}
 }
