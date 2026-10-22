@@ -1,15 +1,19 @@
 package com.example.banhammer;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,18 +23,37 @@ public class BanhammerMod implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		// /adminpanel: alleen zichtbaar en bruikbaar voor operators (en dus de owner)
+		// /adminpanel  en  /adminpanel speler <naam>  (alleen voor Staff of hoger)
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
 				dispatcher.register(Commands.literal("adminpanel")
-						.requires(source -> source.getPlayer() != null && Ops.isOperator(source.getPlayer()))
+						.requires(source -> source.getPlayer() != null && Roles.has(source.getPlayer(), Role.STAFF))
 						.executes(context -> {
 							ServerPlayer player = context.getSource().getPlayerOrException();
-							if (!Ops.isOperator(player)) {
+							if (!Roles.has(player, Role.STAFF)) {
 								return 0;
 							}
 							AdminPanel.openMain(player);
 							return 1;
-						})));
+						})
+						.then(Commands.literal("speler")
+								.then(Commands.argument("naam", StringArgumentType.word())
+										.executes(context -> {
+											ServerPlayer player = context.getSource().getPlayerOrException();
+											if (!Roles.has(player, Role.STAFF)) {
+												return 0;
+											}
+											String name = StringArgumentType.getString(context, "naam");
+											ServerPlayer target = player.level().getServer().getPlayerList().getPlayerByName(name);
+											if (target == null) {
+												player.sendSystemMessage(Component.literal("Admin Panel: " + name + " is niet online."));
+												return 0;
+											}
+											AdminPanel.openTarget(player, target.getUUID());
+											return 1;
+										})))));
+
+		// Event-timer (Raining Tacos)
+		ServerTickEvents.END_SERVER_TICK.register(Events::tick);
 
 		// Shift + rechtsklik met een hamer: volgende reden / andere stand
 		UseItemCallback.EVENT.register((player, level, hand) -> {
@@ -44,7 +67,8 @@ public class BanhammerMod implements ModInitializer {
 			if (!ban && !kick && !op) {
 				return InteractionResult.PASS;
 			}
-			if (!Ops.isOperator(sp)) {
+			Role needed = op ? Role.OWNER : (ban ? Role.ADMIN : Role.MODERATOR);
+			if (!Roles.has(sp, needed)) {
 				return InteractionResult.PASS;
 			}
 
@@ -58,13 +82,22 @@ public class BanhammerMod implements ModInitializer {
 			return InteractionResult.SUCCESS;
 		});
 
-		// Slaan met een hamer
+		// Slaan met een hamer of met het custom zwaard
 		AttackEntityCallback.EVENT.register((player, level, hand, entity, hitResult) -> {
 			if (!(player instanceof ServerPlayer attacker)) {
 				return InteractionResult.PASS;
 			}
 
 			ItemStack held = attacker.getItemInHand(hand);
+			MinecraftServer server = attacker.level().getServer();
+
+			// Custom zwaard: effect bij slag, de schade zelf gaat gewoon door
+			CustomData data = held.get(DataComponents.CUSTOM_DATA);
+			if (data != null && data.copyTag().contains("bhsword")) {
+				CustomItems.onHit(server, entity, data.copyTag().getStringOr("effect", "none"));
+				return InteractionResult.PASS;
+			}
+
 			boolean ban = Hammers.isHammer(held, true);
 			boolean kick = Hammers.isHammer(held, false);
 			boolean op = Hammers.isOpHammer(held);
@@ -76,46 +109,48 @@ public class BanhammerMod implements ModInitializer {
 			}
 
 			if (op) {
-				return useOpHammer(attacker, target, held);
+				return useOpHammer(attacker, target, held, server);
 			}
 
+			String attackerName = attacker.getGameProfile().name();
 			String targetName = target.getGameProfile().name();
 
-			if (Ops.isOperator(target)) {
+			Role needed = ban ? Role.ADMIN : Role.MODERATOR;
+			if (!Roles.has(attacker, needed)) {
+				attacker.sendSystemMessage(Component.literal("Hamer: je hebt daar geen rechten voor (minimaal " + needed.label + ")."));
+				return InteractionResult.SUCCESS;
+			}
+			if (Roles.isProtected(target)) {
 				attacker.sendSystemMessage(Component.literal(
-						"Banhammer: " + targetName + " is een operator en kan niet worden " + (ban ? "gebanned." : "gekicked.")));
+						"Hamer: " + targetName + " is staff/operator en kan niet worden " + (ban ? "gebanned." : "gekicked.")));
 				return InteractionResult.SUCCESS;
 			}
 
 			String reason = Hammers.reason(held, ban);
-			MinecraftServer server = attacker.level().getServer();
 			String command = ban
 					? "ban " + targetName + " " + reason
 					: "kick " + targetName + " " + reason;
-			server.getCommands().performPrefixedCommand(attacker.createCommandSourceStack(), command);
+			StaffLog.record(attackerName, command);
+			Cmd.run(server, command);
 
 			attacker.sendSystemMessage(Component.literal(
-					"Banhammer: " + targetName + (ban ? " is gebanned" : " is gekicked") + " (" + reason + ")."));
+					"Hamer: " + targetName + (ban ? " is gebanned" : " is gekicked") + " (" + reason + ")."));
 			return InteractionResult.SUCCESS;
 		});
 
-		LOGGER.info("Banhammer, Kickhammer, Ophammer en Admin Panel (server-only) geladen!");
+		LOGGER.info("Banhammer, Kickhammer, Ophammer, rollen en Admin Panel (server-only) geladen!");
 	}
 
-	private static InteractionResult useOpHammer(ServerPlayer attacker, ServerPlayer target, ItemStack held) {
+	private static InteractionResult useOpHammer(ServerPlayer attacker, ServerPlayer target, ItemStack held, MinecraftServer server) {
 		String attackerName = attacker.getGameProfile().name();
 		String targetName = target.getGameProfile().name();
 
-		if (!Ops.isOperator(attacker)) {
-			return InteractionResult.PASS;
-		}
-		// Staat er een owners-lijst, dan mogen alleen owners de Ophammer gebruiken
-		if (Owners.restricted() && !Owners.isOwner(attackerName)) {
+		if (!Roles.has(attacker, Role.OWNER)) {
 			attacker.sendSystemMessage(Component.literal("Ophammer: alleen owners mogen deze hamer gebruiken."));
 			return InteractionResult.SUCCESS;
 		}
 
-		boolean targetIsOp = Ops.isOperator(target);
+		boolean targetIsOp = Ops.isOperatorStrict(target);
 		String command;
 		String done;
 
@@ -131,7 +166,7 @@ public class BanhammerMod implements ModInitializer {
 				attacker.sendSystemMessage(Component.literal("Ophammer: " + targetName + " is geen operator."));
 				return InteractionResult.SUCCESS;
 			}
-			if (Owners.isOwner(targetName)) {
+			if (Roles.of(target) == Role.OWNER) {
 				attacker.sendSystemMessage(Component.literal("Ophammer: " + targetName + " is owner en kan niet worden gedeopt."));
 				return InteractionResult.SUCCESS;
 			}
@@ -139,8 +174,8 @@ public class BanhammerMod implements ModInitializer {
 			done = targetName + " is geen operator meer.";
 		}
 
-		attacker.level().getServer().getCommands()
-				.performPrefixedCommand(attacker.createCommandSourceStack(), command);
+		StaffLog.record(attackerName, command);
+		Cmd.run(server, command);
 		attacker.sendSystemMessage(Component.literal("Ophammer: " + done));
 		return InteractionResult.SUCCESS;
 	}
