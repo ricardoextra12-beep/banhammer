@@ -32,7 +32,7 @@ public class BanhammerMod implements ModInitializer {
 							return 1;
 						})));
 
-		// Shift + rechtsklik met een hamer: volgende reden (staat meteen in de naam van de hamer)
+		// Shift + rechtsklik met een hamer: volgende reden / andere stand
 		UseItemCallback.EVENT.register((player, level, hand) -> {
 			if (!(player instanceof ServerPlayer sp) || !sp.isShiftKeyDown()) {
 				return InteractionResult.PASS;
@@ -40,18 +40,25 @@ public class BanhammerMod implements ModInitializer {
 			ItemStack held = sp.getItemInHand(hand);
 			boolean ban = Hammers.isHammer(held, true);
 			boolean kick = Hammers.isHammer(held, false);
-			if (!ban && !kick) {
+			boolean op = Hammers.isOpHammer(held);
+			if (!ban && !kick && !op) {
 				return InteractionResult.PASS;
 			}
 			if (!Ops.isOperator(sp)) {
 				return InteractionResult.PASS;
 			}
-			Hammers.cycle(held, ban);
-			sp.sendSystemMessage(Component.literal("Reden: " + Hammers.reason(held, ban)), true);
+
+			if (op) {
+				Hammers.cycleOp(held);
+				sp.sendSystemMessage(Component.literal("Ophammer: " + Hammers.opModeText(held)), true);
+			} else {
+				Hammers.cycle(held, ban);
+				sp.sendSystemMessage(Component.literal("Reden: " + Hammers.reason(held, ban)), true);
+			}
 			return InteractionResult.SUCCESS;
 		});
 
-		// Slaan met een hamer: ban of kick met de gekozen reden
+		// Slaan met een hamer
 		AttackEntityCallback.EVENT.register((player, level, hand, entity, hitResult) -> {
 			if (!(player instanceof ServerPlayer attacker)) {
 				return InteractionResult.PASS;
@@ -60,11 +67,16 @@ public class BanhammerMod implements ModInitializer {
 			ItemStack held = attacker.getItemInHand(hand);
 			boolean ban = Hammers.isHammer(held, true);
 			boolean kick = Hammers.isHammer(held, false);
-			if (!ban && !kick) {
+			boolean op = Hammers.isOpHammer(held);
+			if (!ban && !kick && !op) {
 				return InteractionResult.PASS;
 			}
 			if (!(entity instanceof ServerPlayer target)) {
 				return InteractionResult.PASS;
+			}
+
+			if (op) {
+				return useOpHammer(attacker, target, held);
 			}
 
 			String targetName = target.getGameProfile().name();
@@ -87,6 +99,49 @@ public class BanhammerMod implements ModInitializer {
 			return InteractionResult.SUCCESS;
 		});
 
-		LOGGER.info("Banhammer, Kickhammer en Admin Panel (server-only) geladen!");
+		LOGGER.info("Banhammer, Kickhammer, Ophammer en Admin Panel (server-only) geladen!");
+	}
+
+	private static InteractionResult useOpHammer(ServerPlayer attacker, ServerPlayer target, ItemStack held) {
+		String attackerName = attacker.getGameProfile().name();
+		String targetName = target.getGameProfile().name();
+
+		if (!Ops.isOperator(attacker)) {
+			return InteractionResult.PASS;
+		}
+		// Staat er een owners-lijst, dan mogen alleen owners de Ophammer gebruiken
+		if (Owners.restricted() && !Owners.isOwner(attackerName)) {
+			attacker.sendSystemMessage(Component.literal("Ophammer: alleen owners mogen deze hamer gebruiken."));
+			return InteractionResult.SUCCESS;
+		}
+
+		boolean targetIsOp = Ops.isOperator(target);
+		String command;
+		String done;
+
+		if (Hammers.givesOp(held)) {
+			if (targetIsOp) {
+				attacker.sendSystemMessage(Component.literal("Ophammer: " + targetName + " is al operator."));
+				return InteractionResult.SUCCESS;
+			}
+			command = "op " + targetName;
+			done = targetName + " is nu operator.";
+		} else {
+			if (!targetIsOp) {
+				attacker.sendSystemMessage(Component.literal("Ophammer: " + targetName + " is geen operator."));
+				return InteractionResult.SUCCESS;
+			}
+			if (Owners.isOwner(targetName)) {
+				attacker.sendSystemMessage(Component.literal("Ophammer: " + targetName + " is owner en kan niet worden gedeopt."));
+				return InteractionResult.SUCCESS;
+			}
+			command = "deop " + targetName;
+			done = targetName + " is geen operator meer.";
+		}
+
+		attacker.level().getServer().getCommands()
+				.performPrefixedCommand(attacker.createCommandSourceStack(), command);
+		attacker.sendSystemMessage(Component.literal("Ophammer: " + done));
+		return InteractionResult.SUCCESS;
 	}
 }
