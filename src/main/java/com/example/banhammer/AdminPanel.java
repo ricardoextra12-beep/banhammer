@@ -190,12 +190,12 @@ public final class AdminPanel {
 		b.put(21, cmd(Items.GLASS, "Spectator voor " + name, ChatFormatting.AQUA, "gamemode spectator " + name));
 
 		// Waarschuwing met bliksem: 6 blokken naast de speler (geen schade) + titel in beeld
-		b.put(16, cmd(Items.LIGHTNING_ROD, "Waarschuw met bliksem", ChatFormatting.YELLOW,
+		b.put(16, cmd(Items.TRIDENT, "Waarschuw met bliksem", ChatFormatting.YELLOW,
 				"title " + name + " title {text:\"WAARSCHUWING\",color:\"red\",bold:true}",
 				"title " + name + " subtitle {text:\"Let op je gedrag!\",color:\"yellow\"}",
 				"execute at " + name + " run summon minecraft:lightning_bolt ~6 ~ ~"));
 		// Directe bliksemschicht op de speler (geeft schade)
-		b.put(22, cmd(Items.LIGHTNING_ROD, "Bliksem recht op " + name, ChatFormatting.DARK_RED,
+		b.put(22, cmd(Items.TRIDENT, "Bliksem recht op " + name, ChatFormatting.DARK_RED,
 				"execute at " + name + " run summon minecraft:lightning_bolt ~ ~ ~"));
 
 		b.put(26, toPlayers());
@@ -209,7 +209,7 @@ public final class AdminPanel {
 
 		b.put(13, cmd(Items.FEATHER, "Helder weer", ChatFormatting.WHITE, "weather clear"));
 		b.put(14, cmd(Items.WATER_BUCKET, "Regen", ChatFormatting.BLUE, "weather rain"));
-		b.put(15, cmd(Items.LIGHTNING_ROD, "Onweer", ChatFormatting.DARK_PURPLE, "weather thunder"));
+		b.put(15, cmd(Items.TRIDENT, "Onweer", ChatFormatting.DARK_PURPLE, "weather thunder"));
 
 		b.put(19, cmd(Items.POPPY, "Moeilijkheid: peaceful", ChatFormatting.GREEN, "difficulty peaceful"));
 		b.put(20, cmd(Items.IRON_SWORD, "Moeilijkheid: normal", ChatFormatting.YELLOW, "difficulty normal"));
