@@ -8,28 +8,87 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 
-/** Bouwt de twee hamers. Beide zijn een mace; alleen de banhammer heeft een enchant-glans. */
+import java.util.List;
+
+/**
+ * Bouwt de twee hamers. Beide zijn een mace; alleen de banhammer heeft een enchant-glans.
+ * Met Shift + rechtermuisknop wissel je van reden. De gekozen reden staat in de naam.
+ * Wil je andere redenen? Pas de twee lijsten hieronder aan.
+ */
 public final class Hammers {
+	public static final List<String> BAN_REASONS = List.of(
+			"Cheaten of hacken",
+			"Griefen",
+			"Spammen",
+			"Beledigen of pesten",
+			"Reclame maken",
+			"Regels overtreden",
+			"Bug misbruiken",
+			"Gebanned door staff"
+	);
+
+	public static final List<String> KICK_REASONS = List.of(
+			"AFK",
+			"Spammen",
+			"Taalgebruik",
+			"Storen",
+			"Waarschuwing",
+			"Even afkoelen"
+	);
+
 	private Hammers() {
 	}
 
 	public static ItemStack banhammer() {
-		ItemStack stack = base("Banhammer", ChatFormatting.RED, "banhammer");
+		ItemStack stack = new ItemStack(Items.MACE);
 		stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+		apply(stack, true, 0);
 		return stack;
 	}
 
 	public static ItemStack kickhammer() {
-		return base("Kickhammer", ChatFormatting.GOLD, "kickhammer");
+		ItemStack stack = new ItemStack(Items.MACE);
+		apply(stack, false, 0);
+		return stack;
 	}
 
-	private static ItemStack base(String name, ChatFormatting color, String tagKey) {
-		ItemStack stack = new ItemStack(Items.MACE);
-		stack.set(DataComponents.CUSTOM_NAME,
-				Component.literal(name).withStyle(style -> style.withColor(color).withItalic(false)));
+	public static boolean isHammer(ItemStack stack, boolean ban) {
+		CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+		return data != null && data.copyTag().contains(ban ? "banhammer" : "kickhammer");
+	}
+
+	public static int reasonIndex(ItemStack stack) {
+		CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+		if (data == null) {
+			return 0;
+		}
+		return data.copyTag().getIntOr("reason", 0);
+	}
+
+	public static String reason(ItemStack stack, boolean ban) {
+		List<String> reasons = ban ? BAN_REASONS : KICK_REASONS;
+		return reasons.get(Math.floorMod(reasonIndex(stack), reasons.size()));
+	}
+
+	/** Zet de volgende reden op de hamer (en past de naam aan). */
+	public static void cycle(ItemStack stack, boolean ban) {
+		apply(stack, ban, reasonIndex(stack) + 1);
+	}
+
+	private static void apply(ItemStack stack, boolean ban, int index) {
+		List<String> reasons = ban ? BAN_REASONS : KICK_REASONS;
+		int i = Math.floorMod(index, reasons.size());
+		ChatFormatting color = ban ? ChatFormatting.RED : ChatFormatting.GOLD;
+
 		CompoundTag tag = new CompoundTag();
-		tag.putBoolean(tagKey, true);
+		tag.putBoolean(ban ? "banhammer" : "kickhammer", true);
+		tag.putInt("reason", i);
 		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-		return stack;
+
+		stack.set(DataComponents.CUSTOM_NAME,
+				Component.literal(ban ? "Banhammer" : "Kickhammer")
+						.withStyle(style -> style.withColor(color).withItalic(false))
+						.append(Component.literal(" - " + reasons.get(i))
+								.withStyle(style -> style.withColor(ChatFormatting.GRAY).withItalic(false))));
 	}
 }
