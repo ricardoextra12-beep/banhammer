@@ -20,6 +20,7 @@ import net.minecraft.world.item.Items;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /** Server-side kistmenu (werkt voor gewone clients zonder mod). Alleen operators kunnen het gebruiken. */
 public final class AdminPanel {
@@ -52,9 +53,11 @@ public final class AdminPanel {
 	}
 
 	/** Knop die een commando uitvoert en het menu open laat. */
-	private static Button cmd(Item item, String name, ChatFormatting color, String command) {
+	private static Button cmd(Item item, String name, ChatFormatting color, String... commands) {
 		return new Button(named(item, name, color), clicker -> {
-			run(clicker, command);
+			for (String command : commands) {
+				run(clicker, command);
+			}
 			return false;
 		});
 	}
@@ -80,10 +83,9 @@ public final class AdminPanel {
 		});
 	}
 
-	private static Button giveButton(boolean ban) {
-		ItemStack stack = ban ? Hammers.banhammer() : Hammers.kickhammer();
-		return new Button(stack, clicker -> {
-			ItemStack hammer = ban ? Hammers.banhammer() : Hammers.kickhammer();
+	private static Button giveButton(Supplier<ItemStack> factory) {
+		return new Button(factory.get(), clicker -> {
+			ItemStack hammer = factory.get();
 			if (!clicker.getInventory().add(hammer)) {
 				clicker.sendSystemMessage(Component.literal("Admin Panel: je inventaris is vol."));
 			}
@@ -187,6 +189,15 @@ public final class AdminPanel {
 		b.put(20, cmd(Items.GRASS_BLOCK, "Creative voor " + name, ChatFormatting.GREEN, "gamemode creative " + name));
 		b.put(21, cmd(Items.GLASS, "Spectator voor " + name, ChatFormatting.AQUA, "gamemode spectator " + name));
 
+		// Waarschuwing met bliksem: 6 blokken naast de speler (geen schade) + titel in beeld
+		b.put(16, cmd(Items.LIGHTNING_ROD, "Waarschuw met bliksem", ChatFormatting.YELLOW,
+				"title " + name + " title {text:\"WAARSCHUWING\",color:\"red\",bold:true}",
+				"title " + name + " subtitle {text:\"Let op je gedrag!\",color:\"yellow\"}",
+				"execute at " + name + " run summon minecraft:lightning_bolt ~6 ~ ~"));
+		// Directe bliksemschicht op de speler (geeft schade)
+		b.put(22, cmd(Items.LIGHTNING_ROD, "Bliksem recht op " + name, ChatFormatting.DARK_RED,
+				"execute at " + name + " run summon minecraft:lightning_bolt ~ ~ ~"));
+
 		b.put(26, toPlayers());
 		open(viewer, "Speler: " + name, 3, b);
 	}
@@ -233,8 +244,9 @@ public final class AdminPanel {
 
 	public static void openHammers(ServerPlayer viewer) {
 		Map<Integer, Button> b = new HashMap<>();
-		b.put(11, giveButton(true));
-		b.put(15, giveButton(false));
+		b.put(11, giveButton(Hammers::banhammer));
+		b.put(13, giveButton(Hammers::ophammer));
+		b.put(15, giveButton(Hammers::kickhammer));
 		b.put(22, toMain());
 		open(viewer, "Hamers (Shift + rechtsklik = andere reden)", 3, b);
 	}
