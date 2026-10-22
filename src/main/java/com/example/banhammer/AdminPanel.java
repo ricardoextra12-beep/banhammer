@@ -11,7 +11,7 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -117,7 +117,7 @@ public final class AdminPanel {
 
 	private static void give(ServerPlayer player, ItemStack stack) {
 		if (!player.getInventory().add(stack)) {
-			player.drop(stack, false);
+			player.sendSystemMessage(Component.literal("Admin Panel: je inventaris is vol."));
 		}
 	}
 
@@ -140,7 +140,7 @@ public final class AdminPanel {
 
 		/** Niets mag uit het menu worden gehaald: we vangen elke klik zelf af. */
 		@Override
-		public void clicked(int slotId, int button, ClickType clickType, Player player) {
+		public void clicked(int slotId, int button, ContainerInput input, Player player) {
 			if (player instanceof ServerPlayer clicker && slotId >= 0 && slotId < rows * 9) {
 				if (!Ops.isOperator(clicker)) {
 					clicker.closeContainer();
