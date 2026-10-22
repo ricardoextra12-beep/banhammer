@@ -11,15 +11,15 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
-/** Controleert via ops.json of een speler operator is (de owner staat daar ook in). */
+/** Leest ops.json (vanilla operators). */
 public final class Ops {
 	private static final Path OPS_FILE = Path.of("ops.json");
 
 	private Ops() {
 	}
 
-	/** Bij een leesfout geeft dit true terug: bij twijfel is een speler beschermd. */
-	public static boolean isOperator(ServerPlayer player) {
+	/** TRUE = staat in ops.json, FALSE = staat er niet in, null = bestand niet te lezen. */
+	private static Boolean lookup(ServerPlayer player) {
 		String uuid = player.getUUID().toString();
 		String name = player.getGameProfile().name();
 		try (Reader reader = Files.newBufferedReader(OPS_FILE)) {
@@ -27,18 +27,29 @@ public final class Ops {
 			for (JsonElement element : ops) {
 				JsonObject op = element.getAsJsonObject();
 				if (op.has("uuid") && op.get("uuid").getAsString().equalsIgnoreCase(uuid)) {
-					return true;
+					return Boolean.TRUE;
 				}
 				if (op.has("name") && op.get("name").getAsString().equalsIgnoreCase(name)) {
-					return true;
+					return Boolean.TRUE;
 				}
 			}
-			return false;
+			return Boolean.FALSE;
 		} catch (NoSuchFileException e) {
-			return false;
+			return Boolean.FALSE;
 		} catch (Exception e) {
-			BanhammerMod.LOGGER.warn("Kon ops.json niet lezen, speler wordt voor de zekerheid beschermd", e);
-			return true;
+			BanhammerMod.LOGGER.warn("Kon ops.json niet lezen", e);
+			return null;
 		}
+	}
+
+	/** Voor BESCHERMING: bij een leesfout geldt iedereen als operator (veilig). */
+	public static boolean isOperator(ServerPlayer player) {
+		Boolean result = lookup(player);
+		return result == null || result;
+	}
+
+	/** Voor RECHTEN GEVEN: bij een leesfout krijgt niemand rechten (veilig). */
+	public static boolean isOperatorStrict(ServerPlayer player) {
+		return Boolean.TRUE.equals(lookup(player));
 	}
 }
